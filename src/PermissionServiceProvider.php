@@ -20,7 +20,7 @@ class PermissionServiceProvider extends ServiceProvider
             ], 'config');
 
             $this->publishes([
-                __DIR__.'/../database/migrations/create_permission_tables.php.stub' => $this->getMigrationFileName($filesystem),
+                __DIR__ . '/../database/migrations/create_permission_tables.php' => $this->getMigrationFileName($filesystem),
             ], 'migrations');
         }
 

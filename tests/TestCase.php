@@ -110,7 +110,7 @@ abstract class TestCase extends Orchestra
             $this->createCacheTable();
         }
 
-        include_once __DIR__.'/../database/migrations/create_permission_tables.php.stub';
+        include_once __DIR__ . '/../database/migrations/create_permission_tables.php';
 
         (new \CreatePermissionTables())->up();
 

@@ -20,52 +20,92 @@ class CreatePermissionTables extends Migration
             throw new \Exception('Error: config/permission.php not found and defaults could not be merged. Please publish the package configuration before proceeding.');
         }
 
+        if (!Schema::hasTable('modules')){
+            Schema::create('modules', function (Blueprint $table) {
+                $table->bigIncrements('id');
+                $table->timestamps();
+            });
+        }
+
+        if (!Schema::hasTable('companies')){
+            Schema::create('companies', function (Blueprint $table) {
+                $table->bigIncrements('id');
+                $table->timestamps();
+            });
+        }
+
         Schema::create($tableNames['permissions'], function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->uuid('uuid');
             $table->string('name');
+            $table->string('display_name');
             $table->string('guard_name');
-            $table->string('guard_name');
+            $table->unsignedBigInteger('module_id');
             $table->timestamps();
+
+            $table->foreign('module_id')
+                ->references('id')
+                ->on('modules')
+                ->onDelete('cascade');
         });
 
         Schema::create($tableNames['roles'], function (Blueprint $table) {
             $table->bigIncrements('id');
+            $table->uuid('uuid');
             $table->string('name');
+            $table->string('display_name');
             $table->string('guard_name');
+            $table->unsignedBigInteger('module_id');
             $table->timestamps();
+
+            $table->foreign('module_id')
+                ->references('id')
+                ->on('modules')
+                ->onDelete('cascade');
         });
 
         Schema::create($tableNames['model_has_permissions'], function (Blueprint $table) use ($tableNames, $columnNames) {
+            $table->unsignedBigInteger('company_id')->nullable();
             $table->unsignedBigInteger('permission_id');
 
             $table->string('model_type');
             $table->unsignedBigInteger($columnNames['model_morph_key']);
-            $table->index([$columnNames['model_morph_key'], 'model_type'], 'model_has_permissions_model_id_model_type_index');
+
+            $table->index([$columnNames['model_morph_key'], 'model_type', 'company_id']);
 
             $table->foreign('permission_id')
                 ->references('id')
                 ->on($tableNames['permissions'])
                 ->onDelete('cascade');
 
-            $table->primary(['permission_id', $columnNames['model_morph_key'], 'model_type'],
-                    'model_has_permissions_permission_model_type_primary');
+            $table->foreign('company_id')
+                ->references('id')
+                ->on('companies')
+                ->onDelete('cascade');
+
+            $table->primary(['permission_id', $columnNames['model_morph_key'], 'model_type', 'company_id'],'primary_key');
         });
 
         Schema::create($tableNames['model_has_roles'], function (Blueprint $table) use ($tableNames, $columnNames) {
+            $table->unsignedBigInteger('company_id')->nullable();
             $table->unsignedBigInteger('role_id');
 
             $table->string('model_type');
             $table->unsignedBigInteger($columnNames['model_morph_key']);
-            $table->index([$columnNames['model_morph_key'], 'model_type'], 'model_has_roles_model_id_model_type_index');
+            $table->index([$columnNames['model_morph_key'], 'model_type', 'company_id']);
 
             $table->foreign('role_id')
                 ->references('id')
                 ->on($tableNames['roles'])
                 ->onDelete('cascade');
 
-            $table->primary(['role_id', $columnNames['model_morph_key'], 'model_type'],
-                    'model_has_roles_role_model_type_primary');
+            $table->foreign('company_id')
+                ->references('id')
+                ->on('companies')
+                ->onDelete('cascade');
+
+            $table->primary(['role_id', $columnNames['model_morph_key'], 'model_type', 'company_id'],
+                'primary_key');
         });
 
         Schema::create($tableNames['role_has_permissions'], function (Blueprint $table) use ($tableNames) {
