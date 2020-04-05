@@ -2,19 +2,21 @@
 
 namespace Spatie\Permission\Traits;
 
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Spatie\Permission\Exceptions\PermissionRequiresCompany;
 use Spatie\Permission\Guard;
 use Illuminate\Support\Collection;
 use Illuminate\Database\Eloquent\Builder;
+use Spatie\Permission\Models\Role;
 use Spatie\Permission\WildcardPermission;
 use Spatie\Permission\PermissionRegistrar;
 use Spatie\Permission\Contracts\Permission;
 use Spatie\Permission\Exceptions\GuardDoesNotMatch;
-use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Spatie\Permission\Exceptions\PermissionDoesNotExist;
 use Spatie\Permission\Exceptions\WildcardPermissionInvalidArgument;
+use Spatie\Permission\Models\Permission as PermissionModel;
 
-trait HasPermissions
+trait CompanyHasPermissions
 {
     private $permissionClass;
 
@@ -29,26 +31,14 @@ trait HasPermissions
         });
     }
 
-    public function getPermissionClass()
-    {
-        if (! isset($this->permissionClass)) {
-            $this->permissionClass = app(PermissionRegistrar::class)->getPermissionClass();
-        }
-
-        return $this->permissionClass;
-    }
-
     /**
      * A model may have multiple direct permissions.
      */
-    public function permissions(): MorphToMany
+    public function permissions(): BelongsToMany
     {
-        return $this->morphToMany(
-            config('permission.models.permission'),
-            'model',
-            config('permission.table_names.model_has_permissions'),
-            config('permission.column_names.model_morph_key'),
-            'permission_id'
+        return $this->belongsToMany(
+            PermissionModel::class,
+            'company_has_permissions'
         )->withPivot('company_id')->withTimestamps();
     }
 
@@ -60,7 +50,7 @@ trait HasPermissions
      *
      * @return \Illuminate\Database\Eloquent\Builder
      */
-    public function scopePermission(Builder $query, $permissions): Builder
+    /*public function scopePermission(Builder $query, $permissions): Builder
     {
         $permissions = $this->convertToPermissionModels($permissions);
 
@@ -78,14 +68,14 @@ trait HasPermissions
                 });
             }
         });
-    }
+    }*/
 
     /**
      * @param string|array|\Spatie\Permission\Contracts\Permission|\Illuminate\Support\Collection $permissions
      *
      * @return array
      */
-    protected function convertToPermissionModels($permissions): array
+    /*protected function convertToPermissionModels($permissions): array
     {
         if ($permissions instanceof Collection) {
             $permissions = $permissions->all();
@@ -98,9 +88,9 @@ trait HasPermissions
                 return $permission;
             }
 
-            return $this->getPermissionClass()->findByName($permission, $this->getDefaultGuardName());
+            return Permission::findByName($permission, $this->getDefaultGuardName());
         }, $permissions);
-    }
+    }*/
 
     /**
      * Determine if the model may perform the given permission.
@@ -111,23 +101,21 @@ trait HasPermissions
      * @return bool
      * @throws PermissionDoesNotExist
      */
-    public function hasPermissionTo($permission, int $company_id = 0, $guardName = null): bool
+    public function hasPermissionTo($permission, $guardName = null): bool
     {
-        if (config('permission.enable_wildcard_permission', false)) {
+        /*if (config('permission.enable_wildcard_permission', false)) {
             return $this->hasWildcardPermission($permission, $guardName);
-        }
-
-        $permissionClass = $this->getPermissionClass();
+        }*/
 
         if (is_string($permission)) {
-            $permission = $permissionClass->findByName(
+            $permission = PermissionModel::findByName(
                 $permission,
                 $guardName ?? $this->getDefaultGuardName()
             );
         }
 
         if (is_int($permission)) {
-            $permission = $permissionClass->findById(
+            $permission = PermissionModel::findById(
                 $permission,
                 $guardName ?? $this->getDefaultGuardName()
             );
@@ -137,7 +125,7 @@ trait HasPermissions
             throw new PermissionDoesNotExist;
         }
 
-        return $this->hasDirectPermission($permission, $company_id) || $this->hasPermissionViaRole($permission, $company_id);
+        return $this->hasDirectPermission($permission) || $this->hasPermissionViaRole($permission);
     }
 
     /**
@@ -148,12 +136,12 @@ trait HasPermissions
      *
      * @return bool
      */
-    protected function hasWildcardPermission($permission, $guardName = null): bool
+    /*protected function hasWildcardPermission($permission, $guardName = null): bool
     {
         $guardName = $guardName ?? $this->getDefaultGuardName();
 
         if (is_int($permission)) {
-            $permission = $this->getPermissionClass()->findById($permission, $guardName);
+            $permission = PermissionModel::findById($permission, $guardName);
         }
 
         if ($permission instanceof Permission) {
@@ -177,7 +165,7 @@ trait HasPermissions
         }
 
         return false;
-    }
+    }*/
 
     /**
      * @deprecated since 2.35.0
@@ -254,9 +242,9 @@ trait HasPermissions
      *
      * @return bool
      */
-    protected function hasPermissionViaRole(Permission $permission, int $company_id = 0): bool
+    protected function hasPermissionViaRole(Permission $permission): bool
     {
-        return $this->hasRole($permission->roles, $company_id);
+        return $this->hasRole($permission->roles);
     }
 
     /**
@@ -267,28 +255,20 @@ trait HasPermissions
      * @return bool
      * @throws PermissionDoesNotExist
      */
-    public function hasDirectPermission($permission, int $company_id): bool
+    public function hasDirectPermission($permission): bool
     {
-        $permissionClass = $this->getPermissionClass();
-
         if (is_string($permission)) {
-            $permission = $permissionClass->findByName($permission, $this->getDefaultGuardName());
+            $permission = PermissionModel::findByName($permission, $this->getDefaultGuardName());
         }
 
         if (is_int($permission)) {
-            $permission = $permissionClass->findById($permission, $this->getDefaultGuardName());
+            $permission = PermissionModel::findById($permission, $this->getDefaultGuardName());
         }
 
         if (! $permission instanceof Permission) {
             throw new PermissionDoesNotExist;
         }
-
-        return $this->permissions->contains(function($value) use ($permission, $company_id){
-            if ($value->company_required)
-                return ($company_id == $value->pivot->company_id)
-                    && ($value->id == $permission->id);
-                return $value->id == $permission->id;
-        });
+        return $this->permissions->contains('id', $permission->id);
     }
 
     /**
@@ -324,10 +304,8 @@ trait HasPermissions
      *
      * @return $this
      */
-    public function givePermissionTo($permissions, int $company_id = 0)
+    public function givePermissionTo(...$permissions)
     {
-        $roleClass = app(PermissionRegistrar::class)->getRoleClass();;
-
         $permissions = collect($permissions)
             ->flatten()
             ->map(function ($permission) {
@@ -343,26 +321,7 @@ trait HasPermissions
             ->each(function ($permission) {
                 $this->ensureModelSharesGuard($permission);
             })
-
-            //While assinging permissions to roles no need for company
-            ->when(get_class($this) != get_class($roleClass), function($permissions) use ($company_id){
-                //Checking if Permission required company
-                $permissions->each(function ($permission) use ($company_id) {
-                    if($permission->company_required && $company_id == 0)
-                        throw PermissionRequiresCompany::create($permission->name);
-                });
-
-                return $permissions->mapWithKeys(function($permission, $key) use ($company_id){
-                    if($permission->company_required)
-                        return [$permission->id => ['company_id' => $company_id]];
-                    return  [$permission->id];
-                });
-            })
-            //When assinging persmission to roles
-            ->when(get_class($this) == get_class($roleClass), function($permissions) use ($company_id){
-
-                return $permissions->map->id;
-            })
+            ->map->id
             ->all();
 
         $model = $this->getModel();
@@ -412,9 +371,9 @@ trait HasPermissions
      *
      * @return $this
      */
-    public function revokePermissionTo($permission, int $company_id = 0)
+    public function revokePermissionTo($permission)
     {
-        $this->permissions()->detach($this->getStoredPermission($permission, $company_id));
+        $this->permissions()->detach($this->getStoredPermission($permission));
 
         $this->forgetCachedPermissions();
 
@@ -433,21 +392,18 @@ trait HasPermissions
      *
      * @return \Spatie\Permission\Contracts\Permission|\Spatie\Permission\Contracts\Permission[]|\Illuminate\Support\Collection
      */
-    protected function getStoredPermission($permissions, int $company_id)
+    protected function getStoredPermission($permissions)
     {
-        $permissionClass = $this->getPermissionClass();
-
         if (is_numeric($permissions)) {
-            return $permissionClass->findById($permissions, $this->getDefaultGuardName());
+            return PermissionModel::findById($permissions, $this->getDefaultGuardName());
         }
 
         if (is_string($permissions)) {
-            return $permissionClass->findByName($permissions, $this->getDefaultGuardName());
+            return PermissionModel::findByName($permissions, $this->getDefaultGuardName());
         }
 
         if (is_array($permissions)) {
-            return $permissionClass
-                ->whereIn('name', $permissions)
+            return PermissionModel::whereIn('name', $permissions)
                 ->whereIn('guard_name', $this->getGuardNames())
                 ->get();
         }
