@@ -13,13 +13,6 @@ class CreatePermissionTables extends Migration
      */
     public function up()
     {
-        $tableNames = config('permission.table_names');
-        $columnNames = config('permission.column_names');
-
-        if (empty($tableNames)) {
-            throw new \Exception('Error: config/permission.php not found and defaults could not be merged. Please publish the package configuration before proceeding.');
-        }
-
         if (!Schema::hasTable('modules')){
             Schema::create('modules', function (Blueprint $table) {
                 $table->bigIncrements('id');
@@ -34,7 +27,7 @@ class CreatePermissionTables extends Migration
             });
         }
 
-        Schema::create($tableNames['permissions'], function (Blueprint $table) {
+        Schema::create('permissions', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->uuid('uuid');
             $table->string('name');
@@ -43,7 +36,6 @@ class CreatePermissionTables extends Migration
             $table->unsignedBigInteger('module_id');
             $table->string('controller');
             $table->string('method');
-            $table->boolean('company_required')->default(1);
             $table->timestamps();
 
             $table->foreign('module_id')
@@ -52,7 +44,7 @@ class CreatePermissionTables extends Migration
                 ->onDelete('cascade');
         });
 
-        Schema::create($tableNames['roles'], function (Blueprint $table) {
+        Schema::create('roles', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->uuid('uuid');
             $table->string('name');
@@ -67,66 +59,87 @@ class CreatePermissionTables extends Migration
                 ->onDelete('cascade');
         });
 
-        Schema::create($tableNames['user_has_permissions'], function (Blueprint $table) use ($tableNames, $columnNames) {
+        Schema::create('company_permissions', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->unsignedBigInteger('company_id')->nullable();
             $table->unsignedBigInteger('permission_id');
-
-            $table->unsignedBigInteger('user_id');
             $table->timestamps();
 
-            $table->index(['user_id', 'company_id']);
-            $table->unique(['user_id', 'company_id', 'permission_id'], 'unique');
+            $table->index(['company_id', 'permission_id']);
+            $table->unique(['company_id', 'permission_id']);
 
             $table->foreign('permission_id')
                 ->references('id')
-                ->on($tableNames['permissions'])
+                ->on('permissions')
                 ->onDelete('cascade');
 
             $table->foreign('company_id')
                 ->references('id')
                 ->on('companies')
                 ->onDelete('cascade');
+        });
+
+        Schema::create('user_has_permissions', function (Blueprint $table) {
+            $table->bigIncrements('id');
+            $table->unsignedBigInteger('user_id');
+            $table->unsignedBigInteger('company_permission_id')->nullable();
+            $table->timestamps();
+
+            $table->index(['user_id', 'company_permission_id']);
+            $table->unique(['user_id', 'company_permission_id']);
+
+            $table->foreign('company_permission_id')
+                ->references('id')
+                ->on('company_has_permissions')
+                ->onDelete('cascade');
 
             $table->foreign('user_id')
                 ->references('id')
                 ->on('users')
                 ->onDelete('cascade');
-
-            $table->primary(['permission_id', 'user_id'],'primary_key');
         });
 
-        Schema::create($tableNames['user_has_roles'], function (Blueprint $table) use ($tableNames, $columnNames) {
+        Schema::create('company_roles', function (Blueprint $table) {
             $table->bigIncrements('id');
-            $table->unsignedBigInteger('company_id')->nullable();
+            $table->unsignedBigInteger('company_id');
             $table->unsignedBigInteger('role_id');
-
-            $table->unsignedBigInteger('user_id');
             $table->timestamps();
 
-            $table->index(['user_id', 'company_id', 'role_id']);
-            $table->unique(['role_id', 'user_id', 'company_id']);
+            $table->index(['company_id', 'role_id']);
+            $table->unique(['role_id','company_id']);
 
             $table->foreign('role_id')
                 ->references('id')
-                ->on($tableNames['roles'])
+                ->on('roles')
                 ->onDelete('cascade');
 
             $table->foreign('company_id')
                 ->references('id')
                 ->on('companies')
                 ->onDelete('cascade');
+        });
+
+        Schema::create('user_has_roles', function (Blueprint $table) {
+            $table->bigIncrements('id');
+            $table->unsignedBigInteger('user_id');
+            $table->unsignedBigInteger('company_role_id');
+            $table->timestamps();
+
+            $table->index(['user_id', 'company_role_id']);
+            $table->unique(['user_id', 'company_role_id']);
 
             $table->foreign('user_id')
                 ->references('id')
                 ->on('users')
                 ->onDelete('cascade');
 
-            $table->primary(['role_id', 'user_id'],
-                'primary_key');
+            $table->foreign('company_role_id')
+                ->references('id')
+                ->on('company_has_roles')
+                ->onDelete('cascade');
         });
 
-        Schema::create($tableNames['role_has_permissions'], function (Blueprint $table) use ($tableNames) {
+        Schema::create('role_has_permissions', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->unsignedBigInteger('permission_id');
             $table->unsignedBigInteger('role_id');
@@ -134,15 +147,30 @@ class CreatePermissionTables extends Migration
 
             $table->foreign('permission_id')
                 ->references('id')
-                ->on($tableNames['permissions'])
+                ->on('permissions')
                 ->onDelete('cascade');
 
             $table->foreign('role_id')
                 ->references('id')
-                ->on($tableNames['roles'])
+                ->on('roles')
+                ->onDelete('cascade');
+        });
+
+        Schema::create('company_role_has_company_permissions', function (Blueprint $table) {
+            $table->bigIncrements('id');
+            $table->unsignedBigInteger('company_permission_id');
+            $table->unsignedBigInteger('company_role_id');
+            $table->timestamps();
+
+            $table->foreign('company_permission_id')
+                ->references('id')
+                ->on('company_permissions')
                 ->onDelete('cascade');
 
-            $table->primary(['permission_id', 'role_id'], 'role_has_permissions_permission_id_role_id_primary');
+            $table->foreign('company_role_id')
+                ->references('id')
+                ->on('company_roles')
+                ->onDelete('cascade');
         });
 
         app('cache')
@@ -157,16 +185,15 @@ class CreatePermissionTables extends Migration
      */
     public function down()
     {
-        $tableNames = config('permission.table_names');
+        Schema::drop('user_has_roles');
+        Schema::drop('user_has_permissions');
+        Schema::drop('company_role_has_company_permissions');
 
-        if (empty($tableNames)) {
-            throw new \Exception('Error: config/permission.php not found and defaults could not be merged. Please publish the package configuration before proceeding, or drop the tables manually.');
-        }
+        Schema::drop('company_roles');
+        Schema::drop('company_permissions');
 
-        Schema::drop($tableNames['role_has_permissions']);
-        Schema::drop($tableNames['model_has_roles']);
-        Schema::drop($tableNames['model_has_permissions']);
-        Schema::drop($tableNames['roles']);
-        Schema::drop($tableNames['permissions']);
+        Schema::drop('role_has_permissions');
+        Schema::drop('roles');
+        Schema::drop('permissions');
     }
 }

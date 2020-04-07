@@ -3,10 +3,11 @@
 namespace Spatie\Permission\Models;
 
 use App\Models\Module\Module;
+use App\User;
 use Illuminate\Support\Str;
 use Spatie\Permission\Guard;
 use Illuminate\Support\Collection;
-use Spatie\Permission\Traits\HasRoles;
+use Spatie\Permission\Traits\UserHasRoles;
 use Illuminate\Database\Eloquent\Model;
 use Spatie\Permission\PermissionRegistrar;
 use Spatie\Permission\Traits\RefreshesPermissionCache;
@@ -18,14 +19,11 @@ use Spatie\Permission\Contracts\Permission as PermissionContract;
 
 class Permission extends Model implements PermissionContract
 {
-    use HasRoles;
+    use UserHasRoles;
     use RefreshesPermissionCache;
 
     protected $guarded = ['id'];
-
-    protected $casts = [
-        'company_required' => 'boolean',
-    ];
+    protected $hidden = ['id','module_id'];
 
     public static function boot()
     {
@@ -41,8 +39,6 @@ class Permission extends Model implements PermissionContract
         $attributes['guard_name'] = $attributes['guard_name'] ?? config('auth.defaults.guard');
 
         parent::__construct($attributes);
-
-        $this->setTable(config('permission.table_names.permissions'));
     }
 
     public static function create(array $attributes = [])
@@ -63,25 +59,17 @@ class Permission extends Model implements PermissionContract
      */
     public function roles(): BelongsToMany
     {
-        return $this->belongsToMany(
-            config('permission.models.role'),
-            config('permission.table_names.role_has_permissions'),
-            'permission_id',
-            'role_id'
-        )->withTimestamps();
+        return $this->belongsToMany(Role::class,'role_has_permissions');
     }
 
     /**
      * A permission belongs to some users of the model associated with its guard.
      */
-    public function users(): MorphToMany
+    public function users(): BelongsToMany
     {
-        return $this->morphedByMany(
-            getModelForGuard($this->attributes['guard_name']),
-            'model',
-            config('permission.table_names.model_has_permissions'),
-            'permission_id',
-            config('permission.column_names.model_morph_key')
+        return $this->belongsToMany(
+            User::class,
+            'user_has_permissions'
         );
     }
 

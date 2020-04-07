@@ -7,7 +7,7 @@ use App\User;
 use Illuminate\Support\Str;
 use Spatie\Permission\Guard;
 use Illuminate\Support\Collection;
-use Spatie\Permission\Traits\HasRoles;
+use Spatie\Permission\Traits\UserHasRoles;
 use Illuminate\Database\Eloquent\Model;
 use Spatie\Permission\PermissionRegistrar;
 use Spatie\Permission\Traits\RefreshesPermissionCache;
@@ -19,14 +19,10 @@ use Spatie\Permission\Contracts\Permission as PermissionContract;
 
 class Permission extends Model implements PermissionContract
 {
-    use HasRoles;
+    use UserHasRoles;
     use RefreshesPermissionCache;
 
     protected $guarded = ['id'];
-
-    protected $casts = [
-        'company_required' => 'boolean',
-    ];
 
     public static function boot()
     {

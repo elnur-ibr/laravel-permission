@@ -2,21 +2,21 @@
 
 namespace Spatie\Permission\Models;
 
+use App\User;
 use Illuminate\Support\Str;
 use Spatie\Permission\Guard;
 use Illuminate\Database\Eloquent\Model;
-use Spatie\Permission\Traits\HasPermissions;
+use Spatie\Permission\Traits\CompanyHasPermissions;
 use Spatie\Permission\Exceptions\RoleDoesNotExist;
 use Spatie\Permission\Exceptions\GuardDoesNotMatch;
 use Spatie\Permission\Exceptions\RoleAlreadyExists;
 use Spatie\Permission\Contracts\Role as RoleContract;
 use Spatie\Permission\Traits\RefreshesPermissionCache;
-use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Role extends Model implements RoleContract
 {
-    use HasPermissions;
+    use CompanyHasPermissions;
     use RefreshesPermissionCache;
 
     protected $guarded = ['id'];
@@ -35,8 +35,6 @@ class Role extends Model implements RoleContract
         $attributes['guard_name'] = $attributes['guard_name'] ?? config('auth.defaults.guard');
 
         parent::__construct($attributes);
-
-        $this->setTable(config('permission.table_names.roles'));
     }
 
     public static function create(array $attributes = [])
@@ -56,25 +54,17 @@ class Role extends Model implements RoleContract
     public function permissions(): BelongsToMany
     {
         return $this->belongsToMany(
-            config('permission.models.permission'),
-            config('permission.table_names.role_has_permissions'),
-            'role_id',
-            'permission_id'
-        )->withTimestamps();
+            Permission::class,
+            'role_has_permissions'
+        );
     }
 
     /**
      * A role belongs to some users of the model associated with its guard.
      */
-    public function users(): MorphToMany
+    public function users(): BelongsToMany
     {
-        return $this->morphedByMany(
-            getModelForGuard($this->attributes['guard_name']),
-            'model',
-            config('permission.table_names.model_has_roles'),
-            'role_id',
-            config('permission.column_names.model_morph_key')
-        );
+        return $this->belongsToMany(User::class,'user_has_roles');
     }
 
     /**
@@ -145,18 +135,18 @@ class Role extends Model implements RoleContract
      */
     public function hasPermissionTo($permission): bool
     {
-        if (config('permission.enable_wildcard_permission', false)) {
+        /*if (config('permission.enable_wildcard_permission', false)) {
             return $this->hasWildcardPermission($permission, $this->getDefaultGuardName());
-        }
+        }*/
 
-        $permissionClass = $this->getPermissionClass();
+        //$permissionClass = $this->getPermissionClass();
 
         if (is_string($permission)) {
-            $permission = $permissionClass->findByName($permission, $this->getDefaultGuardName());
+            $permission = Permission::findByName($permission, $this->getDefaultGuardName());
         }
 
         if (is_int($permission)) {
-            $permission = $permissionClass->findById($permission, $this->getDefaultGuardName());
+            $permission = Permission::findById($permission, $this->getDefaultGuardName());
         }
 
         if (! $this->getGuardNames()->contains($permission->guard_name)) {

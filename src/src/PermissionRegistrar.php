@@ -133,7 +133,7 @@ class PermissionRegistrar
             });
         }
 
-        $permissions = clone $this->permissions;
+        $permissions = $this->permissions;
 
         foreach ($params as $attr => $value) {
             $permissions = $permissions->where($attr, $value);

@@ -6,10 +6,10 @@ use Illuminate\Cache\CacheManager;
 use Illuminate\Support\Collection;
 use Spatie\Permission\Contracts\Role;
 use Illuminate\Contracts\Auth\Access\Gate;
-use Spatie\Permission\Contracts\Permission;
+use Spatie\Permission\Contracts\CompanyPermission as CompanyPermissionContract;
 use Illuminate\Contracts\Auth\Access\Authorizable;
-use Spatie\Permission\Models\CompanyHasPermission;
-use Spatie\Permission\Models\CompanyHasRole;
+use Spatie\Permission\Models\CompanyPermission;
+use Spatie\Permission\Models\CompanyRole;
 
 
 class CompanyPermissionRegistrar
@@ -45,8 +45,8 @@ class CompanyPermissionRegistrar
      */
     public function __construct(CacheManager $cacheManager)
     {
-        $this->permissionClass = CompanyHasPermission::class;
-        $this->roleClass = CompanyHasRole::class;
+        $this->permissionClass = CompanyPermission::class;
+        $this->roleClass = CompanyRole::class;
 
         $this->cacheManager = $cacheManager;
         $this->initializeCache();
@@ -124,22 +124,23 @@ class CompanyPermissionRegistrar
      *
      * @return \Illuminate\Support\Collection
      */
-    public function getPermissions(array $params = []): Collection
+    public function getPermissions(int $company_id, array $params = []): Collection
     {
         if ($this->permissions === null) {
             $this->permissions = $this->cache->remember(self::$cacheKey, self::$cacheExpirationTime, function () {
                 return $this->getPermissionClass()
-                    ->with(['permission'])
+                    ->with(['permission', 'roles'])
                     ->get();
             });
         }
 
         $permissions = $this->permissions;
-        dd($permissions);
 
         foreach ($params as $attr => $value) {
-            $permissions = $permissions->where($attr, $value);
+            $permissions = $permissions->where("permission.$attr", $value);
         }
+
+        $permissions = $permissions->where('company_id', $company_id);
 
         return $permissions;
     }
@@ -149,7 +150,7 @@ class CompanyPermissionRegistrar
      *
      * @return \Spatie\Permission\Contracts\Permission
      */
-    public function getPermissionClass(): Permission
+    public function getPermissionClass(): CompanyPermissionContract
     {
         return app($this->permissionClass);
     }

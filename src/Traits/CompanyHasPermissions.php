@@ -38,7 +38,7 @@ trait CompanyHasPermissions
     {
         return $this->belongsToMany(
             PermissionModel::class,
-            'company_has_permissions'
+            'company_permissions'
         )->withTimestamps();
     }
 

@@ -8,6 +8,8 @@ use Spatie\Permission\Contracts\Role;
 use Illuminate\Contracts\Auth\Access\Gate;
 use Spatie\Permission\Contracts\Permission;
 use Illuminate\Contracts\Auth\Access\Authorizable;
+use Spatie\Permission\Models\Permission as PermissionModel;
+use Spatie\Permission\Models\Role as RoleModel;
 
 class PermissionRegistrar
 {
@@ -42,8 +44,8 @@ class PermissionRegistrar
      */
     public function __construct(CacheManager $cacheManager)
     {
-        $this->permissionClass = config('permission.models.permission');
-        $this->roleClass = config('permission.models.role');
+        $this->permissionClass = PermissionModel::class;
+        $this->roleClass = RoleModel::class;
 
         $this->cacheManager = $cacheManager;
         $this->initializeCache();
@@ -131,7 +133,7 @@ class PermissionRegistrar
             });
         }
 
-        $permissions = clone $this->permissions;
+        $permissions = $this->permissions;
 
         foreach ($params as $attr => $value) {
             $permissions = $permissions->where($attr, $value);

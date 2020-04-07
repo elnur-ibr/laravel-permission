@@ -3,6 +3,7 @@
 namespace Spatie\Permission\Traits;
 
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Spatie\Permission\CompanyPermissionRegistrar;
 use Spatie\Permission\Exceptions\PermissionRequiresCompany;
 use Spatie\Permission\Guard;
 use Illuminate\Support\Collection;
@@ -12,33 +13,45 @@ use Spatie\Permission\WildcardPermission;
 use Spatie\Permission\PermissionRegistrar;
 use Spatie\Permission\Contracts\Permission;
 use Spatie\Permission\Exceptions\GuardDoesNotMatch;
+use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Spatie\Permission\Exceptions\PermissionDoesNotExist;
 use Spatie\Permission\Exceptions\WildcardPermissionInvalidArgument;
-use Spatie\Permission\Models\Permission as PermissionModel;
+use Spatie\Permission\Models\CompanyPermission;
 
-trait CompanyHasPermissions
+trait UserHasPermissions
 {
     private $permissionClass;
 
-    public static function bootHasPermissions()
+    public static function bootHasCompanyPermissions()
     {
         static::deleting(function ($model) {
             if (method_exists($model, 'isForceDeleting') && ! $model->isForceDeleting()) {
                 return;
             }
 
-            $model->permissions()->detach();
+            $model->companyPermissions()->detach();
         });
     }
+
+    /*public function getPermissionClass()
+    {
+        if (! isset($this->permissionClass)) {
+            $this->permissionClass = app(PermissionRegistrar::class)->getPermissionClass();
+        }
+
+        return $this->permissionClass;
+    }*/
 
     /**
      * A model may have multiple direct permissions.
      */
-    public function permissions(): BelongsToMany
+    public function companyPermissions(): BelongsToMany
     {
         return $this->belongsToMany(
-            PermissionModel::class,
-            'company_has_permissions'
+            CompanyPermission::class,
+            'user_has_permissions',
+            'user_id',
+            'company_permission_id'
         )->withTimestamps();
     }
 
@@ -101,7 +114,7 @@ trait CompanyHasPermissions
      * @return bool
      * @throws PermissionDoesNotExist
      */
-    public function hasPermissionTo($permission, $guardName = null): bool
+    public function hasPermissionTo(int $company_id, $permission, $guardName = null): bool
     {
         /*if (config('permission.enable_wildcard_permission', false)) {
             return $this->hasWildcardPermission($permission, $guardName);
@@ -109,24 +122,26 @@ trait CompanyHasPermissions
 
         if (is_string($permission)) {
 
-            $permission = PermissionModel::findByName(
+            $permission = CompanyPermission::findByName(
+                $company_id,
                 $permission,
                 $guardName ?? $this->getDefaultGuardName()
             );
         }
 
         if (is_int($permission)) {
-            $permission = PermissionModel::findById(
+            $permission = CompanyPermission::findById(
+                $company_id,
                 $permission,
                 $guardName ?? $this->getDefaultGuardName()
             );
         }
 
-        if (! $permission instanceof Permission) {
+        if (! $permission instanceof CompanyPermission) {
             throw new PermissionDoesNotExist;
         }
 
-        return $this->hasDirectPermission($permission) || $this->hasPermissionViaRole($permission);
+        return $this->hasDirectPermission($company_id, $permission) || $this->hasPermissionViaRole($company_id, $permission);
     }
 
     /**
@@ -142,7 +157,7 @@ trait CompanyHasPermissions
         $guardName = $guardName ?? $this->getDefaultGuardName();
 
         if (is_int($permission)) {
-            $permission = PermissionModel::findById($permission, $guardName);
+            $permission = $this->getPermissionClass()->findById($permission, $guardName);
         }
 
         if ($permission instanceof Permission) {
@@ -168,6 +183,14 @@ trait CompanyHasPermissions
         return false;
     }*/
 
+    /**
+     * @deprecated since 2.35.0
+     * @alias of hasPermissionTo()
+     */
+    public function hasUncachedPermissionTo($permission, $guardName = null): bool
+    {
+        return $this->hasPermissionTo($permission, $guardName);
+    }
 
     /**
      * An alias to hasPermissionTo(), but avoids throwing an exception.
@@ -177,10 +200,10 @@ trait CompanyHasPermissions
      *
      * @return bool
      */
-    public function checkPermissionTo($permission, $guardName = null): bool
+    public function checkPermissionTo(int $company_id, $permission, $guardName = null): bool
     {
         try {
-            return $this->hasPermissionTo($permission, $guardName);
+            return $this->hasPermissionTo($company_id, $permission, $guardName);
         } catch (PermissionDoesNotExist $e) {
             return false;
         }
@@ -235,9 +258,9 @@ trait CompanyHasPermissions
      *
      * @return bool
      */
-    protected function hasPermissionViaRole(Permission $permission): bool
+    protected function hasPermissionViaRole(int $company_id, CompanyPermission $permission): bool
     {
-        return $this->hasRole($permission->roles);
+        return $this->hasRole($company_id, $permission->roles);
     }
 
     /**
@@ -248,20 +271,21 @@ trait CompanyHasPermissions
      * @return bool
      * @throws PermissionDoesNotExist
      */
-    public function hasDirectPermission($permission): bool
+    public function hasDirectPermission(int $company_id, $permission): bool
     {
         if (is_string($permission)) {
-            $permission = PermissionModel::findByName($permission, $this->getDefaultGuardName());
+            $permission = CompanyPermission::findByName($company_id, $permission, $this->getDefaultGuardName());
         }
 
         if (is_int($permission)) {
-            $permission = PermissionModel::findById($permission, $this->getDefaultGuardName());
+            $permission = CompanyPermission::findById($company_id, $permission, $this->getDefaultGuardName());
         }
 
-        if (! $permission instanceof Permission) {
+        if (! $permission instanceof CompanyPermission) {
             throw new PermissionDoesNotExist;
         }
-        return $this->permissions->contains('id', $permission->id);
+
+        return $this->companyPermissions->contains('id', $permission->id);
     }
 
     /**
@@ -297,19 +321,19 @@ trait CompanyHasPermissions
      *
      * @return $this
      */
-    public function givePermissionTo(...$permissions)
+    public function givePermissionTo(int $company_id, $permissions)
     {
         $permissions = collect($permissions)
             ->flatten()
-            ->map(function ($permission) {
+            ->map(function ($permission) use ($company_id) {
                 if (empty($permission)) {
                     return false;
                 }
 
-                return $this->getStoredPermission($permission);
+                return $this->getStoredPermission($company_id, $permission);
             })
             ->filter(function ($permission) {
-                return $permission instanceof Permission;
+                return $permission instanceof CompanyPermission;
             })
             ->each(function ($permission) {
                 $this->ensureModelSharesGuard($permission);
@@ -320,8 +344,8 @@ trait CompanyHasPermissions
         $model = $this->getModel();
 
         if ($model->exists) {
-            $this->permissions()->sync($permissions, false);
-            $model->load('permissions');
+            $this->companyPermissions()->sync($permissions, false);
+            $model->load('companyPermissions');
         } else {
             $class = \get_class($model);
 
@@ -331,15 +355,14 @@ trait CompanyHasPermissions
                     if ($modelLastFiredOn !== null && $modelLastFiredOn === $model) {
                         return;
                     }
-                    $object->permissions()->sync($permissions, false);
-                    $object->load('permissions');
+                    $object->companyPermissions()->sync($permissions, false);
+                    $object->load('companyPermissions');
                     $modelLastFiredOn = $object;
                 }
             );
         }
 
-        if(get_class($this) == Role::class)
-            $this->forgetCachedPermissions();
+        $this->forgetCachedCompanyPermissions();
 
         return $this;
     }
@@ -353,7 +376,7 @@ trait CompanyHasPermissions
      */
     public function syncPermissions(...$permissions)
     {
-        $this->permissions()->detach();
+        $this->companyPermissions()->detach();
 
         return $this->givePermissionTo($permissions);
     }
@@ -365,12 +388,11 @@ trait CompanyHasPermissions
      *
      * @return $this
      */
-    public function revokePermissionTo($permission)
+    public function revokePermissionTo($permission, int $company_id)
     {
-        $this->permissions()->detach($this->getStoredPermission($permission));
+        $this->companyPermissions()->detach($this->getStoredPermission($company_id, $permission));
 
-        if(get_class($this) == Role::class)
-            $this->forgetCachedPermissions();
+        $this->forgetCachedCompanyPermissions();
 
         $this->load('permissions');
 
@@ -379,7 +401,7 @@ trait CompanyHasPermissions
 
     public function getPermissionNames(): Collection
     {
-        return $this->permissions->pluck('name');
+        return $this->companyPermissions->pluck('name');
     }
 
     /**
@@ -387,19 +409,20 @@ trait CompanyHasPermissions
      *
      * @return \Spatie\Permission\Contracts\Permission|\Spatie\Permission\Contracts\Permission[]|\Illuminate\Support\Collection
      */
-    protected function getStoredPermission($permissions)
+    protected function getStoredPermission(int $company_id, $permissions)
     {
         if (is_numeric($permissions)) {
-            return PermissionModel::findById($permissions, $this->getDefaultGuardName());
+            return CompanyPermission::findById($company_id, $permissions, $this->getDefaultGuardName());
         }
 
         if (is_string($permissions)) {
-            return PermissionModel::findByName($permissions, $this->getDefaultGuardName());
+            return CompanyPermission::findByName($company_id, $permissions, $this->getDefaultGuardName());
         }
 
         if (is_array($permissions)) {
-            return PermissionModel::whereIn('name', $permissions)
+            return CompanyPermission::whereIn('name', $permissions)
                 ->whereIn('guard_name', $this->getGuardNames())
+                ->where('company_id', $company_id)
                 ->get();
         }
 
@@ -413,7 +436,11 @@ trait CompanyHasPermissions
      */
     protected function ensureModelSharesGuard($roleOrPermission)
     {
-        if (! $this->getGuardNames()->contains($roleOrPermission->guard_name)) {
+        get_class($roleOrPermission) == CompanyPermission::class ?
+            $guard_name = $roleOrPermission->permission->guard_name :
+            $guard_name = $roleOrPermission->role->guard_name;
+
+        if (!$this->getGuardNames()->contains($guard_name)) {
             throw GuardDoesNotMatch::create($roleOrPermission->guard_name, $this->getGuardNames());
         }
     }
@@ -431,9 +458,9 @@ trait CompanyHasPermissions
     /**
      * Forget the cached permissions.
      */
-    public function forgetCachedPermissions()
+    public function forgetCachedCompanyPermissions()
     {
-        app(PermissionRegistrar::class)->forgetCachedPermissions();
+        app(CompanyPermissionRegistrar::class)->forgetCachedPermissions();
     }
 
     /**
