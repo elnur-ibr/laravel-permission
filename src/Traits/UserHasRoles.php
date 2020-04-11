@@ -161,7 +161,7 @@ trait UserHasRoles
      * @param string|null $guard
      * @return bool
      */
-    public function hasRole($roles, int $company_id = 0, string $guard = null): bool
+    public function hasRole(int $company_id, $roles, string $guard = null): bool
     {
         if (is_string($roles) && false !== strpos($roles, '|')) {
             $roles = $this->convertPipeToArray($roles);
@@ -180,18 +180,12 @@ trait UserHasRoles
         }
 
         if ($roles instanceof Role) {
-            //return $this->companyRoles->contains('id', $roles->id);
-            return $this->companyRoles->contains(function($value) use ($roles, $company_id){
-                if ($value->company_required)
-                    return ($company_id == $value->pivot->company_id)
-                        && ($value->id == $roles->id);
-                return $value->id == $roles->id;
-            });
+            return $this->companyRoles->contains('role.id', $roles->id);
         }
 
         if (is_array($roles)) {
             foreach ($roles as $role) {
-                if ($this->hasRole($role, $company_id, $guard)) {
+                if ($this->hasRole($company_id, $role, $guard)) {
                     return true;
                 }
             }
@@ -199,7 +193,11 @@ trait UserHasRoles
             return false;
         }
 
-        return $roles->intersect($guard ? $this->companyRoles->where('guard_name', $guard) : $this->roles)->isNotEmpty();
+        return $roles->intersect(
+            $guard ?
+                $this->companyRoles->pluck('role')->where('guard_name', $guard) :
+                $this->companyRoles->pluck('role')
+        )->isNotEmpty();
     }
 
     /**

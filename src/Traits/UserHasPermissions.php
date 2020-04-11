@@ -121,7 +121,6 @@ trait UserHasPermissions
         }*/
 
         if (is_string($permission)) {
-
             $permission = CompanyPermission::findByName(
                 $company_id,
                 $permission,
@@ -258,9 +257,9 @@ trait UserHasPermissions
      *
      * @return bool
      */
-    protected function hasPermissionViaRole(int $company_id, CompanyPermission $permission): bool
+    protected function hasPermissionViaRole(int $company_id, CompanyPermission $companyPermission): bool
     {
-        return $this->hasRole($company_id, $permission->roles);
+        return $this->hasRole($company_id, $companyPermission->permission->roles);
     }
 
     /**

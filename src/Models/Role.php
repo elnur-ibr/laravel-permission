@@ -2,6 +2,7 @@
 
 namespace Spatie\Permission\Models;
 
+use App\Models\Company\Company;
 use App\User;
 use Illuminate\Support\Str;
 use Spatie\Permission\Guard;
@@ -57,6 +58,11 @@ class Role extends Model implements RoleContract
             Permission::class,
             'role_has_permissions'
         );
+    }
+
+    public function scopeGetSubscibedModuleRoles($query, Company $company)
+    {
+        return $query->whereIn('module_id', $company->modules->pluck('id'));
     }
 
     /**

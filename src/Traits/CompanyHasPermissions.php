@@ -3,6 +3,7 @@
 namespace Spatie\Permission\Traits;
 
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Spatie\Permission\CompanyPermissionRegistrar;
 use Spatie\Permission\Exceptions\PermissionRequiresCompany;
 use Spatie\Permission\Guard;
 use Illuminate\Support\Collection;
@@ -341,6 +342,8 @@ trait CompanyHasPermissions
         if(get_class($this) == Role::class)
             $this->forgetCachedPermissions();
 
+        $this->forgetCachedCompanyPermissions();
+
         return $this;
     }
 
@@ -434,6 +437,11 @@ trait CompanyHasPermissions
     public function forgetCachedPermissions()
     {
         app(PermissionRegistrar::class)->forgetCachedPermissions();
+    }
+
+    public function forgetCachedCompanyPermissions()
+    {
+        app(CompanyPermissionRegistrar::class)->forgetCachedPermissions();
     }
 
     /**

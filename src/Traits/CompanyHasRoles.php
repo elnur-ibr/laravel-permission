@@ -36,7 +36,7 @@ trait CompanyHasRoles
             'company_roles',
             'company_id',
             'role_id'
-        )->withTimestamps();
+        )->withTimestamps()->withPivot('id');
     }
 
     /**
@@ -48,7 +48,7 @@ trait CompanyHasRoles
      *
      * @return \Illuminate\Database\Eloquent\Builder
      */
-    public function scopeRole(Builder $query, $roles, $guard = null): Builder
+    /*public function scopeRole(Builder $query, $roles, $guard = null): Builder
     {
         if ($roles instanceof Collection) {
             $roles = $roles->all();
@@ -72,7 +72,7 @@ trait CompanyHasRoles
         return $query->whereHas('roles', function (Builder $subQuery) use ($roles) {
             $subQuery->whereIn(config('permission.table_names.roles').'.id', \array_column($roles, 'id'));
         });
-    }
+    }*/
 
     /**
      * Assign the given role to the model.
